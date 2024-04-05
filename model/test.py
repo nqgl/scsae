@@ -56,7 +56,7 @@ def get_configs(d={}):
         device=device,
     )
 
-    betas = d.get("betas", (0.8, 0.99))
+    betas = d.get("betas", (0.8, 0.98))
     cfg = SAETrainConfig(
         sae_cfg=sae_cfg,
         optim_cfg=OptimConfig(lr=1e-3, betas=betas),
