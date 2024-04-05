@@ -108,12 +108,20 @@ def get_trainer(cfg, legacy_cfg) -> Trainer:
 
 def main():
     buffer = Buffer(cfg.buffer_cfg, train_tokens, model)
+    from nqgl.sc_sae.model.multitrainer import MultiTrainer
 
     def train_buffer():
         for i in tqdm.tqdm(range(90000 * 20 * 1024 // 2048)):
             yield buffer.next()
 
-    trainer = get_trainer(cfg, legacy_cfg)
+    configs = [
+        get_configs({"betas": (b1, b2)}) for b1 in [0.8, 0.9] for b2 in [0.98, 0.997]
+    ]
+
+    trainer = MultiTrainer(
+        configs, model=model, val_tokens=val_tokens, legacy_cfg=legacy_cfg
+    )
+
     trainer.train(train_buffer())
 
 

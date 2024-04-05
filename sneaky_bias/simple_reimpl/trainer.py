@@ -36,7 +36,7 @@ class Trainer:
         """
         lr_mul = self.lr_sched_mul()
         if wandb.run:
-            wandb.log(
+            self.log(
                 {"lr_mult": lr_mul, "lr": self.cfg.optim_cfg.lr * lr_mul}, step=self.t
             )
         return lr_mul
@@ -57,6 +57,12 @@ class Trainer:
         else:
             lr_mul = 1
         return lr_mul
+
+    def log(self, logdict, step=None):
+        if step is None:
+            step = self.t
+        if self.cfg.wandb_project is not None:
+            wandb.log(logdict, step=step)
 
     def forward_train_computation(self, x, acts_box, spoofed_acts_box):
         x_pred = self.model(x, acts_box=acts_box, spoofed_acts_box=spoofed_acts_box)
@@ -103,6 +109,10 @@ class Trainer:
             "l2_norm": l2_norm.item(),
             "mse": mse.item(),
         }
+        self.log_step(logdict)
+        if self.t % self.scheduler_epoch_interval == 0:
+            self.scheduler.step()
+        self.t += 1
         return logdict
 
     def train(self, datasource, skip_wandb=False):
@@ -116,14 +126,10 @@ class Trainer:
             print("Not logging to wandb")
         for x in datasource:
             logdict = self.trainstep(x)
-            self.log(logdict)
-            if self.t % self.scheduler_epoch_interval == 0:
-                self.scheduler.step()
-            self.t += 1
 
-    def log(self, logdict):
+    def log_step(self, logdict):
         if (self.t - 1) % self.logfreq == 0:
-            wandb.log(logdict, step=self.t)
+            self.log(logdict, step=self.t)
         if (self.t - 1) % self.log_recons_freq == 0:
             self.log_recons()
         if (self.t - 1) % self.log_hists_freq == 0:
@@ -133,7 +139,7 @@ class Trainer:
         pass  # TODO
 
     def log_recons(self):
-        wandb.log(
+        self.log(
             {
                 **{
                     "num_steps": self.t,
@@ -152,7 +158,7 @@ class Trainer:
             },
             step=self.t,
         )
-        wandb.log(
+        self.log(
             {
                 ("recons/with_proc_bos/" + k): v
                 for k, v in get_recons_loss(
