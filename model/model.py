@@ -28,7 +28,7 @@ class BiasAdjustedSAE(nn.Module):
             )
         )
         if cfg.tied_init:
-            self.W_enc.data[:] = self.W_dec.data.t()
+            self.W_dec.data[:] = self.W_enc.data.t()
         self.b_enc: Float[Tensor, "d_dict"] = nn.Parameter(torch.zeros(cfg.d_dict))
         self.b_dec: Float[Tensor, "d_data"] = (
             nn.Parameter(torch.zeros(cfg.d_data)) if self.cfg.use_b_dec else 0
