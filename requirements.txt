@@ -3,3 +3,5 @@ unpythonic
 triton
 opt-einsum
 pytest
+ray
+ray[tune]

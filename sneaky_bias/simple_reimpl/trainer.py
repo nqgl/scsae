@@ -42,18 +42,18 @@ class Trainer:
         return lr_mul
 
     def lr_sched_mul(self):
-
-        warmup_steps = 5_000
-        cooldown_begin = 100_000
-        cooldown_period = 40_000  # todo move to config
-
-        if not self.cfg.lr_schedule:
+        if not self.cfg.lr_scheduler_cfg:
             return 1
 
-        if self.t < warmup_steps:
-            lr_mul = self.t / warmup_steps
-        elif self.t > cooldown_begin:
-            lr_mul = max(1 - (self.t - cooldown_begin) / (cooldown_period), 0.1)
+        if self.t < self.cfg.lr_scheduler_cfg.warmup_steps:
+            lr_mul = self.t / self.cfg.lr_scheduler_cfg.warmup_steps
+        elif self.t > self.cfg.lr_scheduler_cfg.cooldown_begin:
+            lr_mul = max(
+                1
+                - (self.t - self.cfg.lr_scheduler_cfg.cooldown_begin)
+                / (self.cfg.lr_scheduler_cfg.cooldown_period),
+                0.1,
+            )
         else:
             lr_mul = 1
         return lr_mul
@@ -105,8 +105,8 @@ class Trainer:
         }
         return logdict
 
-    def train(self, datasource):
-        if self.cfg.wandb_project is not None:
+    def train(self, datasource, skip_wandb=False):
+        if not skip_wandb and self.cfg.wandb_project is not None and wandb.run is None:
             wandb.init(
                 entity="sae_all",
                 project=self.cfg.wandb_project,

@@ -5,4 +5,4 @@ __pycache__/
 nqgl/sae/models/
 notes/
 models-from-remote/
-
+nqgl/*/nqgl/

@@ -1,6 +1,13 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from nqgl.hsae_re.data.buffer2 import BufferConfig
 import torch
+
+
+@dataclass
+class LrSchedulerConfig:
+    warmup_steps: int = 5_000
+    cooldown_begin: int = 60_000
+    cooldown_period: int = 20_000
 
 
 @dataclass
@@ -19,13 +26,18 @@ class OptimConfig:
 @dataclass
 class SAEConfig:
     d_data: int = 768
-    d_dict: int = 768 * 1
+    dict_mult: int = 4
     dtype: str = None
     device: str = "cuda"
     l1_coeff: float = 1e-3
     tied_init: bool = True
     use_b_dec: bool = True
     selectively_norm_dec: bool = False
+    d_dict: int = None
+
+    def __post_init__(self):
+        if self.d_dict is None:
+            self.d_dict = self.d_data * self.dict_mult
 
     ### Maybe add these options back in later
     # norm_dec_grads: bool = True
@@ -35,13 +47,7 @@ class SAEConfig:
 
 
 @dataclass
-class BufferConfig:
-    batch_size: int = None
-
-
-@dataclass
 class DataConfig:
-    excl_first: bool = False
     set_bos: bool = True
     dataset: str = "alancooney/sae-monology-pile-uncopyrighted-tokenizer-gpt2"
     seq_mul: int = 2
@@ -54,9 +60,10 @@ class DataConfig:
 class SAETrainConfig:
     l1_coeff: float = 1 / 12
     wandb_project: str = "bias_thing_reimplemented"
-    sae_cfg: SAEConfig = None
-    buffer_cfg: BufferConfig = None
-    optim_cfg: OptimConfig = None
+    sae_cfg: SAEConfig = field(default_factory=SAEConfig)
+    buffer_cfg: BufferConfig = field(default_factory=BufferConfig)
+    optim_cfg: OptimConfig = field(default_factory=OptimConfig)
     data_cfg: DataConfig = None
     use_autocast: bool = True
     lr_schedule: bool = True
+    lr_scheduler_cfg: LrSchedulerConfig = field(default_factory=LrSchedulerConfig)

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from nqgl.hsae_re.sneaky_bias.simple_reimpl.configs import SAEConfig
+from nqgl.sc_sae.model.configs import SAEConfig
 from unpythonic import box
 from jaxtyping import Float
 

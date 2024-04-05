@@ -1,8 +1,8 @@
-from nqgl.hsae_re.sneaky_bias.simple_reimpl.configs import (
+from nqgl.sc_sae.model.configs import (
     SAEConfig,
     SAETrainConfig,
     OptimConfig,
     DataConfig,
 )
-from nqgl.hsae_re.sneaky_bias.simple_reimpl.model import BiasAdjustedSAE
-from nqgl.hsae_re.sneaky_bias.simple_reimpl.trainer import Trainer
+from nqgl.sc_sae.model.model import BiasAdjustedSAE
+from nqgl.sc_sae.model.trainer import Trainer

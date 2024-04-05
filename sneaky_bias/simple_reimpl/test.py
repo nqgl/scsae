@@ -1,4 +1,4 @@
-from nqgl.hsae_re.sneaky_bias.simple_reimpl import (
+from nqgl.sc_sae.model import (
     Trainer,
     SAETrainConfig,
     SAEConfig,
@@ -15,58 +15,65 @@ from nqgl.sae.scripts.train_hsae import (
 
 from transformer_lens import HookedTransformer
 
-dict_mult = 16
-cfg = SAETrainConfig(
-    sae_cfg=SAEConfig(
-        d_dict=768 * dict_mult,
-    ),
-    optim_cfg=OptimConfig(lr=3e-4, betas=(0.8, 0.98)),
-    data_cfg=DataConfig(),
-    use_autocast=True,
-    lr_schedule=True,
-    l1_coeff=1 / 768,
-)
 DATA_DTYPE = "fp32"
 DTYPE = "fp32"
 device = "cuda"
 
-legacy_cfg = HierarchicalAutoEncoderConfig(
-    site="resid_pre",
-    d_data=768,
-    model_name="gpt2",
-    layer=6,
-    gram_shmidt_trail=512,
-    batch_size=1024,
-    buffer_mult=2048,
-    buffer_refresh_ratio=0.5,
-    flatten_heads=False,
-    buffer_dtype=DATA_DTYPE,
-    enc_dtype=DTYPE,
-    device=device,
-)
 
-buf_cfg = BufferConfig(
-    layer=legacy_cfg.layer,
-    site=legacy_cfg.site,
-    flatten_heads=legacy_cfg.flatten_heads,
-    device=legacy_cfg.device,
-    d_data=legacy_cfg.d_data,
-    batch_size=legacy_cfg.batch_size,
-    buffer_mult=legacy_cfg.buffer_mult,
-    buffer_refresh_ratio=legacy_cfg.buffer_refresh_ratio,
-    buffer_dtype="fp16",
-    buffer_autocast_dtype=DATA_DTYPE,
-    excl_first=cfg.data_cfg.excl_first,
-)
+def get_configs(d={}):
+    dict_mult = d.get("dict_mult", 32)
+    buf_cfg = BufferConfig(
+        layer=6,
+        site="resid_pre",
+        flatten_heads=False,
+        device="cuda",
+        d_data=sae_cfg.d_data,
+        batch_size=1024,
+        buffer_mult=2048,
+        buffer_refresh_ratio=0.5,
+        buffer_dtype="fp16",
+        buffer_autocast_dtype=DATA_DTYPE,
+        excl_first=False,
+    )
+
+    legacy_cfg = HierarchicalAutoEncoderConfig(
+        site="resid_pre",
+        d_data=768,
+        model_name="gpt2",
+        layer=buf_cfg.layer,
+        gram_shmidt_trail=512,
+        batch_size=1024,
+        buffer_mult=2048,
+        buffer_refresh_ratio=0.5,
+        flatten_heads=False,
+        buffer_dtype=DATA_DTYPE,
+        enc_dtype=DTYPE,
+        device=device,
+    )
+
+    sae_cfg = SAEConfig(
+        dict_mult=dict_mult,
+    )
+
+    betas = d.get("betas", (0.8, 0.99))
+    cfg = SAETrainConfig(
+        sae_cfg=sae_cfg,
+        optim_cfg=OptimConfig(lr=1e-3, betas=betas),
+        data_cfg=DataConfig(),
+        use_autocast=True,
+        l1_coeff=d.get("l1_coeff", 1 / 768),
+        buffer_cfg=buf_cfg,
+    )
+    return cfg, legacy_cfg
 
 
-# Data
-from typing import Tuple
 import torch
 
+cfg, legacy_cfg = get_configs()
 model = (
-    HookedTransformer.from_pretrained(legacy_cfg.model_name).to(device)
-    # .to(torch.float16)
+    HookedTransformer.from_pretrained(cfg.data_cfg.model_name)
+    .to(torch.float16)
+    .to(device)
 )
 train_percent = 5
 train_start = 5
@@ -74,7 +81,7 @@ train_tokens = load_data(
     model,
     dataset=cfg.data_cfg.dataset,
     split=f"train[{train_start}%:{train_start+train_percent}%]",
-    name=legacy_cfg.model_name,
+    name=cfg.data_cfg.model_name,
     front_only=False,
     seq_len=128,
     seq_mul=cfg.data_cfg.seq_mul,
@@ -85,7 +92,7 @@ train_tokens = load_data(
 val_tokens = load_data(
     model,
     dataset=cfg.data_cfg.dataset,
-    name=legacy_cfg.model_name,
+    name=cfg.data_cfg.model_name,
     split=f"train[90%:95%]",
     front_only=False,
     seq_len=128,
@@ -94,16 +101,18 @@ val_tokens = load_data(
 )  # .cuda()
 
 
-trainer = Trainer(cfg, model=model, val_tokens=val_tokens, legacy_cfg=legacy_cfg)
+def get_trainer(cfg, legacy_cfg) -> Trainer:
+    return Trainer(cfg, model=model, val_tokens=val_tokens, legacy_cfg=legacy_cfg)
 
 
 def main():
-    buffer = Buffer(buf_cfg, train_tokens, model)
+    buffer = Buffer(cfg.buffer_cfg, train_tokens, model)
 
     def train_buffer():
         for i in tqdm.tqdm(range(90000 * 20 * 1024 // 2048)):
             yield buffer.next()
 
+    trainer = get_trainer(cfg, legacy_cfg)
     trainer.train(train_buffer())
 
 
