@@ -24,14 +24,13 @@ class MultiTrainer:
             )
 
     def train(self, datasource, skip_wandb=False):
-        if not skip_wandb and self.cfg.wandb_project is not None and wandb.run is None:
-            wandb.init(
-                entity="sae_all",
-                project="multi-test",
-                config=self.cfg,
-            )
-        else:
-            print("Not logging to wandb")
+        assert wandb.run is None or skip_wandb
+        wandb.init(
+            entity="sae_all",
+            project="multi-test",
+            config=self.cfg,
+        )
+
         for x in datasource:
             for trainer in self.trainers:
                 trainer.trainstep(x)

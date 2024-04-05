@@ -12,6 +12,7 @@ from nqgl.sae.scripts.train_hsae import (
     load_data,
     HierarchicalAutoEncoderConfig,
 )
+import ray
 
 from transformer_lens import HookedTransformer
 
@@ -114,9 +115,11 @@ def main():
         for i in tqdm.tqdm(range(90000 * 20 * 1024 // 2048)):
             yield buffer.next()
 
-    configs = [
+    config_pairs = [
         get_configs({"betas": (b1, b2)}) for b1 in [0.8, 0.9] for b2 in [0.98, 0.997]
     ]
+    configs = [cfg for cfg, _ in config_pairs]
+    legacy_cfg = config_pairs[0][1]
 
     trainer = MultiTrainer(
         configs, model=model, val_tokens=val_tokens, legacy_cfg=legacy_cfg
