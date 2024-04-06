@@ -4,6 +4,7 @@ from nqgl.sc_sae.model import (
     SAEConfig,
     BiasAdjustedSAE,
     OptimConfig,
+    LrSchedulerConfig,
     DataConfig,
 )
 from nqgl.hsae_re.data.buffer2_no_cast import Buffer, BufferConfig
@@ -21,7 +22,7 @@ device = "cuda"
 
 
 def get_configs(d={}):
-    dict_mult = d.get("dict_mult", 32)
+    dict_mult = d.get("dict_mult", 16)
 
     sae_cfg = SAEConfig(
         dict_mult=dict_mult,
@@ -33,7 +34,7 @@ def get_configs(d={}):
         flatten_heads=False,
         device="cuda",
         d_data=sae_cfg.d_data,
-        batch_size=1024,
+        batch_size=2048,
         buffer_mult=2048,
         buffer_refresh_ratio=0.5,
         buffer_dtype="fp16",
@@ -47,8 +48,7 @@ def get_configs(d={}):
         model_name="gpt2",
         layer=buf_cfg.layer,
         gram_shmidt_trail=512,
-        batch_size=1024,
-        buffer_mult=2048,
+        batch_size=buf_cfg.batch_size,
         buffer_refresh_ratio=0.5,
         flatten_heads=False,
         buffer_dtype=DATA_DTYPE,
@@ -56,14 +56,20 @@ def get_configs(d={}):
         device=device,
     )
 
-    betas = d.get("betas", (0.8, 0.98))
+    betas = d.get("betas", (0.9, 0.99))
     cfg = SAETrainConfig(
         sae_cfg=sae_cfg,
-        optim_cfg=OptimConfig(lr=1e-3, betas=betas),
+        optim_cfg=OptimConfig(lr=d.get("lr", 1e-3), betas=betas),
         data_cfg=DataConfig(),
         use_autocast=True,
-        l1_coeff=d.get("l1_coeff", 1 / 768),
+        l1_coeff=d.get("l1_coeff", 1.5e-3),
         buffer_cfg=buf_cfg,
+        lr_scheduler_cfg=LrSchedulerConfig(
+            warmup_steps=3_00,
+            cooldown_begin=50_000,
+            cooldown_period=d.get("cooldown_period", 4_000),
+            cooldown_factor=d.get("cooldown_factor", 10),
+        ),
     )
     return cfg, legacy_cfg
 

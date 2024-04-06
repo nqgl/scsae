@@ -7,7 +7,7 @@ import tqdm
 ac = ac_cfg.ac
 trainer = test.get_trainer(*test.get_configs())
 
-trainer.train(ac.read_as_iter(2048))
+trainer.train(ac.read_as_iter(4096))
 print("switching data sources")
 buffer = test.Buffer(
     trainer.cfg.buffer_cfg,

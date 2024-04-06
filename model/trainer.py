@@ -52,7 +52,7 @@ class Trainer:
                 1
                 - (self.t - self.cfg.lr_scheduler_cfg.cooldown_begin)
                 / (self.cfg.lr_scheduler_cfg.cooldown_period),
-                0.1,
+                1 / self.cfg.lr_scheduler_cfg.cooldown_factor,
             )
         else:
             lr_mul = 1

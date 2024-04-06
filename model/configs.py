@@ -5,9 +5,10 @@ import torch
 
 @dataclass
 class LrSchedulerConfig:
-    warmup_steps: int = 5_000
+    warmup_steps: int = 2_000
     cooldown_begin: int = 60_000
     cooldown_period: int = 20_000
+    cooldown_factor: int = 10
 
 
 @dataclass
