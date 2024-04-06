@@ -2,7 +2,7 @@ from nqgl.sc_sae.model import (
     Trainer,
     SAETrainConfig,
     SAEConfig,
-    BiasAdjustedSAE,
+    LinearScaleSAE,
     OptimConfig,
     LrSchedulerConfig,
     DataConfig,

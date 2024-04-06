@@ -1,6 +1,7 @@
-from .configs import SAEConfig, SAETrainConfig
+from .config import SAETrainConfig
+from ..models.configs import SAEConfig
 from unpythonic import box
-from .model import BiasAdjustedSAE
+from ..models.mul_grads import LinearScaleSAE
 import torch
 import wandb
 from nqgl.hsae_re.training.recons_modified import get_recons_loss
@@ -9,7 +10,7 @@ from nqgl.hsae_re.training.recons_modified import get_recons_loss
 class Trainer:
     def __init__(self, cfg: SAETrainConfig, model, val_tokens, legacy_cfg):
         self.cfg = cfg
-        self.model = BiasAdjustedSAE(cfg.sae_cfg).to("cuda")
+        self.model = LinearScaleSAE(cfg.sae_cfg).to("cuda")
         self.optim = cfg.optim_cfg.get_optim(self.model.parameters())
         self.t = 1
         self.logfreq = 1

@@ -2,12 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from nqgl.sc_sae.model.configs import SAEConfig
+from nqgl.sc_sae.models.configs import SAEConfig
 from unpythonic import box
 from jaxtyping import Float
+import json
+from pathlib import Path
+from dataclasses import asdict
+
+SAVE_DIR = Path.home() / "workspace"
+if not SAVE_DIR.exists():
+    SAVE_DIR.mkdir()
 
 
-class BiasAdjustedSAE(nn.Module):
+class BaseSAE(nn.Module):
+    MODEL_TYPE = None
+
     def __init__(self, cfg: SAEConfig):
         super().__init__()
         self.cfg = cfg
@@ -34,6 +43,7 @@ class BiasAdjustedSAE(nn.Module):
             nn.Parameter(torch.zeros(cfg.d_data)) if self.cfg.use_b_dec else 0
         )
         self.norm_dec()
+        assert self.MODEL_TYPE == self.cfg.sae_type
 
     def forward(
         self,
@@ -43,31 +53,14 @@ class BiasAdjustedSAE(nn.Module):
     ):
         acts_box = acts_box or box()
         spoofed_acts_box = spoofed_acts_box or box()
-        acts = self.encode(x)
+        acts = self.encode(x, spoofed_acts_box=spoofed_acts_box)
         acts_box << acts
-        spoofed_acts_box << acts
+        if spoofed_acts_box.x is None:
+            spoofed_acts_box << acts
         return self.decode(acts)
 
-    def encode(self, x):
-        mul = (x - self.b_dec) @ self.W_enc
-        pre_acts = mul + self.b_enc
-        active = mul * (pre_acts - (pre_acts - 1).detach())
-        gate = (pre_acts > 0) & (active > 0)
-        return torch.where(gate, active, 0)
-
-    # def encode2(self, x):
-    #     mul = (x - self.b_dec + self.b_dec2) @ self.W_enc
-    #     pre_acts = mul + self.b_enc
-    #     # active = mul * (pre_acts - (pre_acts - 1).detach())
-    #     # sanity check, this should be identical too
-    #     # but just copy pasting stuff to check
-    #     active = pre_acts - self.b_enc
-    #     active = active * (pre_acts - (pre_acts - 1).detach())
-    #     gate = (pre_acts > 0) & (active > 0)
-
-    #     acts = torch.where(gate, active, 0)
-    #     active = pre_acts - cache.bias.detach()
-    #     return acts
+    def encode(self, x, spoofed_acts_box):
+        raise NotImplementedError
 
     def decode(self, acts):
         return acts @ self.W_dec + self.b_dec
@@ -94,3 +87,31 @@ class BiasAdjustedSAE(nn.Module):
         dec_normed = self.W_dec.data / self.W_dec.data.norm(dim=-1, keepdim=True)
         grad_orth = grad - (dec_normed * grad).sum(dim=-1, keepdim=True) * dec_normed
         self.W_dec.grad[:] = grad_orth
+
+    def save(self, name=""):
+        version = self.__class__.get_version()
+        vname = str(version) + "_" + self.__class__.MODEL_TYPE + "_" + name
+        torch.save(self.state_dict(), SAVE_DIR / (vname + ".pt"))
+        with open(SAVE_DIR / (str(vname) + "_cfg.json"), "w") as f:
+            json.dump(asdict(self.cfg), f)
+
+    @classmethod
+    def load(cls, version="*", name=None, cfg=None, save_dir=None, omit_type=False):
+        save_dir = SAVE_DIR if save_dir is None else Path(save_dir)
+        # get correct name with globbing
+        import glob
+
+        vname = str(version) + "_" + cls.MODEL_TYPE if not omit_type else str(version)
+        vname = "*" + vname + "*" + name if name is not None else vname
+        if cfg is None:
+            cfg_search = str(save_dir) + f"/{vname}*_cfg.json"
+            print("seeking", cfg_search)
+            cfg_name = glob.glob(cfg_search)
+            cfg = json.load(open(cfg_name[0]))
+
+            cfg = cls.CONFIG(**cfg)
+        print(vname)
+        pt_name = glob.glob(str(save_dir / (str(vname) + "*.pt")))
+        self = cls(cfg=cfg)
+        self.load_state_dict(torch.load(pt_name[0]))
+        return self
