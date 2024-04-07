@@ -11,7 +11,7 @@ ac = ActsConfig(
     exclude_first_acts=False,
     set_bos=True,
     model_name="gpt2",
-    max_chunk_size_mb=512,
+    max_chunk_size_mb=2048,
 )
 
 

@@ -1,17 +1,11 @@
 import wandb
+from nqgl.sc_sae.sweep.swept_config import SweepConfig
 
-b1_vals = [0.7, 0.9, 0.8]
-b2_vals = [0.9, 0.97, 0.99, 0.997]
 
-sweep_configuration = {
-    "method": "grid",
-    "parameters": {
-        "betas": {"values": [(b1, b2) for b1 in b1_vals for b2 in b2_vals]},
-    },
-}
-sweep_id = wandb.sweep(
-    sweep=sweep_configuration, project="sweep_test", entity="sae_all"
+sc = SweepConfig(
+    l1_coeff=[1e-3 * (1.5**i) for i in range(12)],
+    lr=[1e-3],
+    b2=[0.99],
+    b1=[0.8],
 )
-
-
-print(sweep_id)
+sc.initialize_sweep()

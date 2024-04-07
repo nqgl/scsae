@@ -1,8 +1,12 @@
-from models.configs import DataConfig, LrSchedulerConfig, OptimConfig, SAEConfig
+from data.dataset import DataConfig
+from models.configs import SAEConfig
 from nqgl.hsae_re.data.buffer2 import BufferConfig
-
+from nqgl.sc_sae.trainer.optim_config import OptimConfig
+from nqgl.sc_sae.data.dataset import DataConfig
 
 from dataclasses import dataclass, field
+
+from trainer.sched_config import LrSchedulerConfig
 
 
 @dataclass

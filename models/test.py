@@ -1,27 +1,15 @@
-from nqgl.sc_sae.model import (
-    Trainer,
-    SAETrainConfig,
-    SAEConfig,
-    LinearScaleSAE,
-    OptimConfig,
-    LrSchedulerConfig,
-    DataConfig,
-)
+from nqgl.sc_sae.models import LinearScaleSAE, SAEConfig
+from nqgl.sc_sae.data.dataset import DataConfig
+from nqgl.sc_sae.trainer import Trainer, OptimConfig, LrSchedulerConfig, SAETrainConfig
 from nqgl.hsae_re.data.buffer2_no_cast import Buffer, BufferConfig
 import tqdm
-from nqgl.sae.scripts.train_hsae import (
-    load_data,
-    HierarchicalAutoEncoderConfig,
-)
+from nqgl.sae.scripts.train_hsae import load_data, HierarchicalAutoEncoderConfig
 
 from transformer_lens import HookedTransformer
-
-DATA_DTYPE = "fp32"
-DTYPE = "fp32"
-device = "cuda"
+from typing import Tuple
 
 
-def get_configs(d={}):
+def get_configs(d={}) -> Tuple[SAETrainConfig, HierarchicalAutoEncoderConfig]:
     dict_mult = d.get("dict_mult", 16)
 
     sae_cfg = SAEConfig(
@@ -34,7 +22,7 @@ def get_configs(d={}):
         flatten_heads=False,
         device="cuda",
         d_data=sae_cfg.d_data,
-        batch_size=2048,
+        batch_size=4096,
         buffer_mult=2048,
         buffer_refresh_ratio=0.5,
         buffer_dtype="fp16",
@@ -56,7 +44,7 @@ def get_configs(d={}):
         device=device,
     )
 
-    betas = d.get("betas", (0.9, 0.99))
+    betas = d.get("betas", (0.9, 0.999))
     cfg = SAETrainConfig(
         sae_cfg=sae_cfg,
         optim_cfg=OptimConfig(lr=d.get("lr", 1e-3), betas=betas),
@@ -66,12 +54,17 @@ def get_configs(d={}):
         buffer_cfg=buf_cfg,
         lr_scheduler_cfg=LrSchedulerConfig(
             warmup_steps=3_00,
-            cooldown_begin=50_000,
-            cooldown_period=d.get("cooldown_period", 4_000),
+            cooldown_begin=40_000,
+            cooldown_period=d.get("cooldown_period", 5_000),
             cooldown_factor=d.get("cooldown_factor", 10),
         ),
     )
     return cfg, legacy_cfg
+
+
+DATA_DTYPE = "fp32"
+DTYPE = "fp32"
+device = "cuda"
 
 
 import torch

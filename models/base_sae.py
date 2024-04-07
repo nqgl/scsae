@@ -88,8 +88,22 @@ class BaseSAE(nn.Module):
         grad_orth = grad - (dec_normed * grad).sum(dim=-1, keepdim=True) * dec_normed
         self.W_dec.grad[:] = grad_orth
 
+    @classmethod
+    def get_next_version(cls, name=None, save_dir=None):
+        save_dir = SAVE_DIR if save_dir is None else Path(save_dir)
+
+        search = cls.MODEL_TYPE + f"_{name}" if name is not None else cls.sae_type
+        import glob
+
+        type_files = glob.glob(str(save_dir) + (f"/*_{search}*_cfg.json"))
+        version_list = [int(file.split("/")[-1].split("_")[0]) for file in type_files]
+        if len(version_list):
+            return 1 + max(version_list)
+        else:
+            return 0
+
     def save(self, name=""):
-        version = self.__class__.get_version()
+        version = self.__class__.get_next_version()
         vname = str(version) + "_" + self.__class__.MODEL_TYPE + "_" + name
         torch.save(self.state_dict(), SAVE_DIR / (vname + ".pt"))
         with open(SAVE_DIR / (str(vname) + "_cfg.json"), "w") as f:
