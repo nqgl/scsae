@@ -1,6 +1,7 @@
 from nqgl.sc_sae.models.configs import (
     SAEConfig,
 )
+from nqgl.sc_sae.models.base_sae import BaseSAE
 from nqgl.sc_sae.models.mul_grads import LinearScaleSAE
 from nqgl.sc_sae.models.vanilla_sae import VanillaSAE
 from nqgl.sc_sae.models.non_mul_grads import LinearScaleSAENonMulGrads

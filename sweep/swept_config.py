@@ -2,7 +2,7 @@ from nqgl.sc_sae.models import SAEConfig
 from nqgl.sc_sae.data.dataset import DataConfig
 from nqgl.sc_sae.trainer import SAETrainConfig, OptimConfig, LrSchedulerConfig
 import tqdm
-from nqgl.hsae_re.data.buffer2_no_cast import Buffer, BufferConfig
+from nqgl.sc_sae.from_hsae_re.buffer2_no_cast import Buffer, BufferConfig
 from nqgl.sae.scripts.train_hsae import HierarchicalAutoEncoderConfig
 
 import wandb
@@ -19,12 +19,12 @@ class SweepConfig:
         "VanillaSAE",
     )
     lr: Tuple[float] = (1e-3,)
-    b1: Tuple[float] = (0, 0.5, 0.8, 0.9)
-    b2: Tuple[float] = (0.99, 0.999)
+    b1: Tuple[float] = 0.9
+    b2: Tuple[float] = 0.999
     cooldown_period: Tuple[int] = (5_000,)
     cooldown_factor: Tuple[int] = (10,)
     l1_coeff: Tuple[float] = (1.5e-3, 2e-3)
-    sparsity_penalty_type: Tuple[str] = ("l1",)
+    sparsity_penalty_type: Tuple[str] = ("l1", "l1_sqrt")
 
     def to_sweep_config(self, method="grid"):
         d = asdict(self)
@@ -97,7 +97,11 @@ def set_configs_from_sweep(
     return cfg, legacy_cfg
 
 
-def get_configs_from_sweep(scfg: ConfigFromSweep = None):
+def sparsity_coeff_adjustment(scfg: ConfigFromSweep):
+    d = {}
+
+
+def get_configs_from_sweep(scfg: ConfigFromSweep = None, adjust_sparsity_coeff=True):
     scfg = scfg or ConfigFromSweep(**wandb.config)
     dict_mult = scfg.dict_mult
 

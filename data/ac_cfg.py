@@ -1,7 +1,7 @@
 import sys
 
 # sys.path.append("./nqgl/hsae_re/")
-from nqgl.hsae_re.data.stored_acts_buffer import ActsConfig, store_acts
+from nqgl.sc_sae.from_hsae_re.stored_acts_buffer import ActsConfig, store_acts
 
 ac = ActsConfig(
     2,

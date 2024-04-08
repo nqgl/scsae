@@ -1,5 +1,5 @@
 from models.test import DATA_DTYPE, DTYPE, device
-from nqgl.hsae_re.data.buffer2_no_cast import BufferConfig
+from nqgl.sc_sae.from_hsae_re.buffer2_no_cast import BufferConfig
 from nqgl.sae.scripts.train_hsae import HierarchicalAutoEncoderConfig
 from nqgl.sc_sae.models import DataConfig, LrSchedulerConfig, SAEConfig
 from nqgl.sc_sae.trainer import OptimConfig, SAETrainConfig

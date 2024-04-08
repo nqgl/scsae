@@ -1,5 +1,5 @@
 from .config import SAETrainConfig
-from nqgl.sc_sae.models.configs import SAEConfig
+from nqgl.sc_sae.models import SAEConfig, BaseSAE
 from unpythonic import box
 from nqgl.sc_sae.models.mul_grads import LinearScaleSAE
 import torch
@@ -10,7 +10,7 @@ from nqgl.hsae_re.training.recons_modified import get_recons_loss
 class Trainer:
     def __init__(self, cfg: SAETrainConfig, model, val_tokens, legacy_cfg):
         self.cfg = cfg
-        self.model = cfg.sae_cfg.get_cls()(cfg.sae_cfg).to("cuda")
+        self.model: BaseSAE = cfg.sae_cfg.get_cls()(cfg.sae_cfg).to("cuda")
         self.optim = cfg.optim_cfg.get_optim(self.model.parameters())
         self.t = 1
         self.logfreq = 1
@@ -69,10 +69,21 @@ class Trainer:
         x_pred = self.model(x, acts_box=acts_box, spoofed_acts_box=spoofed_acts_box)
         l1_for_loss = self.l1(spoofed_acts_box.x)
         mse = (x - x_pred).pow(2).mean()
-        loss = mse + self.cfg.sparsity_penalty_from_l1(l1_for_loss)
+        loss = mse + self.cfg.sparsity_penalty(spoofed_acts_box.x)
         return x_pred, l1_for_loss, mse, loss
 
-    def trainstep(self, x):
+    def trainstep(self, x: torch.Tensor):
+        x = x.float()
+        x = x * self.model.cfg.d_data**0.5 / x.pow(2).sum(-1).sqrt().unsqueeze(-1)
+        if x.isnan().any() or x.isinf().any():
+
+            norms = x.pow(2).sum(-1).sqrt()
+            mask = norms.isnan() | norms.isinf() | (norms == 0)
+            print(mask.nonzero())
+            print(x[mask])
+            raise ValueError(
+                "x has nans or infs! This is bad! Implies some acts are all 0s, which should not happen."
+            )
         self.optim.zero_grad()
         acts_box = box()
         spoofed_acts_box = box()

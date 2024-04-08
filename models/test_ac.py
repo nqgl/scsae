@@ -15,7 +15,7 @@ cfg, lgcfg = test.get_configs(
 cfg.lr_scheduler_cfg.cooldown_begin = 10_000
 cfg.lr_scheduler_cfg.cooldown_period = 1_000
 trainer = test.get_trainer(cfg, lgcfg)
-
+cfg.use_autocast = False
 trainer.train(ac.read_as_iter(4096))
 # print("switching data sources")
 # buffer = test.Buffer(

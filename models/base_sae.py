@@ -8,6 +8,7 @@ from jaxtyping import Float
 import json
 from pathlib import Path
 from dataclasses import asdict
+from nqgl.mlutils.components.normalizer.anth_l2 import L2Normalizer, l2normalized
 
 SAVE_DIR = Path.home() / "workspace"
 if not SAVE_DIR.exists():
@@ -45,6 +46,7 @@ class BaseSAE(nn.Module):
         self.norm_dec()
         assert self.MODEL_TYPE == self.cfg.sae_type
 
+    @l2normalized
     def forward(
         self,
         x: Float[Tensor, "batch d_data"],

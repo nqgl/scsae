@@ -1,10 +1,13 @@
 from nqgl.sc_sae.models import LinearScaleSAE, SAEConfig
 from nqgl.sc_sae.data.dataset import DataConfig
 from nqgl.sc_sae.trainer import Trainer, OptimConfig, LrSchedulerConfig, SAETrainConfig
-from nqgl.hsae_re.data.buffer2_no_cast import Buffer, BufferConfig
+from nqgl.sc_sae.from_hsae_re.buffer2_no_cast import Buffer, BufferConfig
 import tqdm
 from nqgl.sae.scripts.train_hsae import load_data, HierarchicalAutoEncoderConfig
 
+# from nqgl.hsae_re.data.buffer2 import Buffer, BufferConfig
+
+from nqgl.sae.training.buffer import Buffer
 from transformer_lens import HookedTransformer
 from typing import Tuple
 
@@ -23,7 +26,7 @@ def get_configs(d={}) -> Tuple[SAETrainConfig, HierarchicalAutoEncoderConfig]:
         device="cuda",
         d_data=sae_cfg.d_data,
         batch_size=4096,
-        buffer_mult=2048,
+        buffer_mult=512,
         buffer_refresh_ratio=0.5,
         buffer_dtype="fp16",
         buffer_autocast_dtype=DATA_DTYPE,
@@ -37,6 +40,7 @@ def get_configs(d={}) -> Tuple[SAETrainConfig, HierarchicalAutoEncoderConfig]:
         layer=buf_cfg.layer,
         gram_shmidt_trail=512,
         batch_size=buf_cfg.batch_size,
+        buffer_mult=buf_cfg.buffer_mult,
         buffer_refresh_ratio=0.5,
         flatten_heads=False,
         buffer_dtype=DATA_DTYPE,
@@ -106,7 +110,8 @@ def get_trainer(cfg, legacy_cfg) -> Trainer:
 
 
 def main():
-    buffer = Buffer(cfg.buffer_cfg, train_tokens, model)
+    # buffer = Buffer(cfg.buffer_cfg, train_tokens, model)
+    buffer = Buffer(legacy_cfg, train_tokens, model)
 
     def train_buffer():
         for i in tqdm.tqdm(range(90000 * 20 * 1024 // 2048)):

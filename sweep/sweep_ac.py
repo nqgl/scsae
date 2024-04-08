@@ -8,10 +8,11 @@ import wandb
 def run():
     wandb.init()
     trainer = test.get_trainer(*get_configs_from_sweep(ConfigFromSweep(**wandb.config)))
-    wandb.init(config=trainer.cfg, reinit=True)
+    wandb.config.update(trainer.cfg)
 
     ac = ac_cfg.ac
     trainer.train(ac.read_as_iter(trainer.cfg.buffer_cfg.batch_size))
+    wandb.finish()
 
 
 sweep_id = open("sweep/sweep_id.txt").read().strip()
