@@ -108,6 +108,8 @@ class ActsConfig:
         while True:
             for i in range(0, len(next_chunk), batch_size):
                 tqdm_iter.update(1)
+                if i + batch_size > len(next_chunk):
+                    break
                 yield next_chunk[i : i + batch_size]
             # del next_chunk
             chunk_num += 1

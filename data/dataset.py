@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple
 from pathlib import Path
 
@@ -7,6 +7,7 @@ import datasets
 SAVE_DIR = Path.home() / "workspace"
 if not SAVE_DIR.exists():
     SAVE_DIR.mkdir()
+import einops
 
 
 @dataclass
@@ -16,6 +17,7 @@ class SplitConfig:
     end: int
     split_key: str = "train"
     documents_per_chunk: int = 2**18  # 128 * 1m // 2 = 32 mtok in the default case
+    tokens_from_split: int = None
 
     def get_splitstr(self):
         return f"{self.split_key}[0.{self.start}:0.{self.end}]"
@@ -26,12 +28,32 @@ class SplitConfig:
 
 @dataclass
 class DataConfig:
-    set_bos: bool = True
     dataset: str = "alancooney/sae-monology-pile-uncopyrighted-tokenizer-gpt2"
     model_name: str = "gpt2"
-    trainsplit: Tuple[int, int] = (0, 50)
-    testsplit: Tuple[int, int] = (50, 80)
-    valsplit: Tuple[int, int] = (90, 100)
+    trainsplit: SplitConfig = field(
+        default_factory=lambda: SplitConfig(
+            splitname="train",
+            start=0,
+            end=50,
+            tokens_from_split=450_000_000,
+        )
+    )
+    testsplit: SplitConfig = field(
+        default_factory=lambda: SplitConfig(
+            splitname="test",
+            start=80,
+            end=90,
+        )
+    )
+    valsplit: SplitConfig = field(
+        default_factory=lambda: SplitConfig(
+            splitname="val",
+            start=90,
+            end=100,
+        )
+    )
+
+    set_bos: bool = True
     seq_mul: int = 2
     seq_len: int = 128
 
@@ -45,38 +67,36 @@ class DataConfig:
         raise NotImplementedError
 
     def idstr(self):
-        return f"{self.dataset.replace('/', '_')}_{self.seq_len}_{self.seq_mul}"
+        return f"{self.dataset.replace('/', '_')}_{self.seq_len}_{self.seq_mul}_{self.set_bos}_{self.model_name}"
 
     def get_shuffled_chunks_dir(self):
         return SAVE_DIR / "data" / "shuffled_chunks" / self.idstr()
 
-    def _store_chunks(self, split, splitname):
+    def _get_split_path(self, split: SplitConfig):
+        return self.get_shuffled_chunks_dir() / split.get_splitstr()
+
+    def _get_tokens_split_path(self, split: SplitConfig):
+        return self._get_split_path(split) / "tokens"
+
+    def _get_acts_split_path(self, split: SplitConfig):
+        return self._get_split_path(split) / "acts"
+
+    def _store_split_token_chunks(
+        self, split: SplitConfig, splitname, tokens_per_chunk
+    ):
         splitstr = f"train[{split[0]}%:{split[1]}%]"
+        tok_dir = self._get_tokens_split_path(split)
+        tok_dir.mkdir(exist_ok=False, parents=True)
+        train_tokens = datasets.load_dataset(
+            dataset=self.dataset,
+            split=split.get_split_key(),
+            cache_dir=SAVE_DIR / "cache",
+        )
+        all_tokens_reshaped = einops.rearrange(
+            all_tokens,
+            "batch (x seq_len) -> (batch x) seq_len",
+            x=seq_mul,
+            seq_len=seq_len,
+        )
 
-        # train_tokens = load_data(
-        #     model,
-        #     dataset=cfg.data_cfg.dataset,
-        #     name=cfg.data_cfg.model_name,
-        #     front_only=False,
-        #     seq_len=128,
-        #     seq_mul=cfg.data_cfg.seq_mul,
-        #     set_bos=cfg.data_cfg.set_bos,
-        # )  # .cuda()
-
-        # splitname = name + split
-        # splitname = splitname.replace("%", "_percent_")
-        # splitname = (
-        #     splitname if not select_first_n else splitname + f"_first_{select_first_n}"
-        # )
-        # if front_only:
-        #     splitname += "_front_only"
-        # if seq_len != 128:
-        #     splitname += f"_seq_len_{seq_len}"
-        # last_filename = (
-        #     splitname + "_reshaped.pt" if set_bos else splitname + "_reshaped_no_bos.pt"
-        # )
-
-        # reshaped_name = dataset.split("/")[-1] + last_filename
-        # dataset_reshaped_path = SAVE_DIR / "data" / reshaped_name
-        # # if dataset exists loading_data_first_time=False
         # loading_data_first_time = not dataset_reshaped_path.exists()

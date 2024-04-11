@@ -6,58 +6,39 @@ import torch
 import wandb
 from nqgl.hsae_re.training.recons_modified import get_recons_loss
 
+from nqgl.sc_sae.models.normalizer.base import NormalizerMixinBase
+from nqgl.sc_sae.trainer.freq_tracker import FreqTracker, EMAFreqTracker
+from nqgl.mlutils.components.component_layer.resampler.adam_resetter import AdamResetter
+
+
+class BaseNormedSAE(NormalizerMixinBase, BaseSAE): ...
+
 
 class Trainer:
     def __init__(self, cfg: SAETrainConfig, model, val_tokens, legacy_cfg):
         self.cfg = cfg
-        self.model: BaseSAE = cfg.sae_cfg.get_cls()(cfg.sae_cfg).to("cuda")
+        self.model: BaseNormedSAE = cfg.sae_cfg.get_cls()(cfg.sae_cfg).to("cuda")
+
+        self.freq_tracker = FreqTracker(d_dict=cfg.sae_cfg.d_dict)
+        self.ema_freq_tracker = EMAFreqTracker(d_dict=cfg.sae_cfg.d_dict)
         self.optim = cfg.optim_cfg.get_optim(self.model.parameters())
         self.t = 1
         self.logfreq = 1
-        self.log_recons_freq = 1000
-        self.log_hists_freq = 1000
+        self.log_recons_freq = 2000
+        self.log_hists_freq = 3000
         self.llm_model = model
         self.llm_val_tokens = val_tokens
+        self.current_datasource = None
 
-        self.scheduler_epoch_interval = 100
+        self.scheduler_epoch_interval = 10
         self.gradscaler = torch.cuda.amp.GradScaler() if self.cfg.use_autocast else None
 
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(
-            self.optim, self.lr_sched_lambda, verbose=True
+            self.optim,
+            self.cfg.lr_scheduler_cfg.get_lr_sched_lambda(self),
+            verbose=True,
         )
         self.legacy_cfg = legacy_cfg
-
-    def lr_sched_lambda(self, epoch):
-        """
-        param is called 'epoch' for convention, but this is *not*
-        by any means an epoch, this is just a count of how many times
-        scheduler.step() has been called, and is accordingly ignored
-        in favor of self.t (which has clear meaning regardless of
-        frequency of calls to the scheduler)
-        """
-        lr_mul = self.lr_sched_mul()
-        if wandb.run:
-            self.log(
-                {"lr_mult": lr_mul, "lr": self.cfg.optim_cfg.lr * lr_mul}, step=self.t
-            )
-        return lr_mul
-
-    def lr_sched_mul(self):
-        if not self.cfg.lr_scheduler_cfg:
-            return 1
-
-        if self.t < self.cfg.lr_scheduler_cfg.warmup_steps:
-            lr_mul = self.t / self.cfg.lr_scheduler_cfg.warmup_steps
-        elif self.t > self.cfg.lr_scheduler_cfg.cooldown_begin:
-            lr_mul = max(
-                1
-                - (self.t - self.cfg.lr_scheduler_cfg.cooldown_begin)
-                / (self.cfg.lr_scheduler_cfg.cooldown_period),
-                1 / self.cfg.lr_scheduler_cfg.cooldown_factor,
-            )
-        else:
-            lr_mul = 1
-        return lr_mul
 
     def log(self, logdict, step=None):
         if step is None:
@@ -73,28 +54,26 @@ class Trainer:
         return x_pred, l1_for_loss, mse, loss
 
     def trainstep(self, x: torch.Tensor):
-        x = x.float()
-        x = x * self.model.cfg.d_data**0.5 / x.pow(2).sum(-1).sqrt().unsqueeze(-1)
-        if x.isnan().any() or x.isinf().any():
-
-            norms = x.pow(2).sum(-1).sqrt()
-            mask = norms.isnan() | norms.isinf() | (norms == 0)
-            print(mask.nonzero())
-            print(x[mask])
-            raise ValueError(
-                "x has nans or infs! This is bad! Implies some acts are all 0s, which should not happen."
-            )
         self.optim.zero_grad()
         acts_box = box()
         spoofed_acts_box = box()
         if self.cfg.use_autocast:
+            # x = x.float()
+            x = self.model.normalize(x)
             with torch.autocast(device_type="cuda"):
                 x_pred, l1_for_loss, mse, loss = self.forward_train_computation(
                     x, acts_box, spoofed_acts_box
                 )
         else:
+            # x = x.float()
+            x = self.model.normalize(x)
             x_pred, l1_for_loss, mse, loss = self.forward_train_computation(
                 x, acts_box, spoofed_acts_box
+            )
+        self.process_acts(acts_box.x)
+        if x.isnan().any() or x.isinf().any():
+            raise ValueError(
+                "x has nans or infs! Possibly a data problem, eg. some acts are all 0s, which should not happen."
             )
         if self.cfg.use_autocast:
             self.gradscaler.scale(loss).backward()
@@ -122,12 +101,28 @@ class Trainer:
             "mse": mse.item(),
         }
         self.log_step(logdict)
-        if self.t % self.scheduler_epoch_interval == 0:
-            self.scheduler.step()
+        self.do_intermittent_actions()
         self.t += 1
         return logdict
 
+    def do_intermittent_actions(self):
+        if self.t % self.scheduler_epoch_interval == 0:
+            self.scheduler.step()
+        if (self.t + self.cfg.reset_before_resample) % self.cfg.resample_frequency == 0:
+            self.freq_tracker.reset()
+        if (
+            self.t % self.cfg.resample_frequency == 0
+            and self.t < self.cfg.lr_scheduler_cfg.cooldown_begin * 0.75
+        ):
+            self.resample()
+
+    def process_acts(self, acts):
+        self.ema_freq_tracker.update(acts)
+        self.freq_tracker.update(acts)
+
     def train(self, datasource, skip_wandb=False):
+        self.model.prime_normalizer(datasource)
+        self.current_datasource = datasource
         if not skip_wandb and self.cfg.wandb_project is not None and wandb.run is None:
             wandb.init(
                 entity="sae_all",
@@ -142,13 +137,22 @@ class Trainer:
     def log_step(self, logdict):
         if (self.t - 1) % self.logfreq == 0:
             self.log(logdict, step=self.t)
-        if (self.t - 1) % self.log_recons_freq == 0:
+        if (self.t - 1) % (self.logfreq * 10) == 0:
+            self.log(
+                {
+                    "num_dead/ema": self.ema_freq_tracker.freqs.lt(3e-6).sum().item(),
+                    "num_dead/count": self.freq_tracker.freqs.lt(3e-6).sum().item(),
+                }
+            )
+        if (self.t - 1) % self.log_recons_freq == 0 and self.t > 1:
             self.log_recons()
         if (self.t - 1) % self.log_hists_freq == 0:
             self.loghists()
 
     def loghists(self):
-        pass  # TODO
+        freqs = self.ema_freq_tracker.freqs
+        hist = wandb.Histogram(freqs.cpu().numpy())
+        self.log({"frequencies": hist})
 
     def log_recons(self):
         self.log(
@@ -198,3 +202,44 @@ class Trainer:
     @classmethod
     def l2_sq(cls, x, x_pred):
         return (x - x_pred).pow(2).mean()
+
+    @torch.inference_mode()
+    def resample(self):
+        print("resampling")
+        dead = self.freq_tracker.freqs < 1e-6
+        num_samples = dead.count_nonzero()
+        if num_samples == 0:
+            return
+        resample_subset_size = 819_200
+        sample_points = torch.zeros(
+            resample_subset_size,
+            self.cfg.sae_cfg.d_data,
+            device="cuda",
+            dtype=torch.float32,
+        )
+        l2_diff_sq = torch.zeros(
+            resample_subset_size, device="cuda", dtype=torch.float32
+        )
+        batch_size = self.cfg.buffer_cfg.batch_size
+        with torch.autocast(device_type="cuda"):
+            for i in range(0, resample_subset_size, batch_size):
+                x = next(self.current_datasource)
+                x_pred = self.model(x)
+                l2_diff_sq[i : i + batch_size] = (x - x_pred).pow(2).sum(dim=-1)
+                sample_points[i : i + batch_size] = x
+        indices = torch.multinomial(l2_diff_sq, num_samples, replacement=False)
+        assert indices.numel() == num_samples
+
+        avg_alive_norm = self.model.W_enc[:, ~dead].norm(dim=-1).mean()
+        new_directions = sample_points[indices]
+        new_directions = new_directions / new_directions.norm(dim=-1, keepdim=True)
+        self.model.W_enc[:, dead] = new_directions.t() * avg_alive_norm * 0.02
+        self.model.W_dec[dead] = new_directions
+        self.model.b_enc[dead] = 0
+        self.model.norm_dec()
+        print("finished resampling")
+        resetter = AdamResetter(self.model)
+        resetter.W_enc.transpose(-2, -1)[dead](self.optim, alive_indices=~dead)
+        resetter.W_dec[dead](self.optim, alive_indices=~dead)
+        resetter.b_enc[dead](self.optim, alive_indices=~dead)
+        # reset the optimizer at these locations

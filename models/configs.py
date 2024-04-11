@@ -14,6 +14,7 @@ class SAEConfig:
     selectively_norm_dec: bool = False
     d_dict: int = None
     sae_type: str = "LinearScaleSAE_MulGrads"
+    normalizer_type: str = "L2Normalizer"
 
     def __post_init__(self):
         if self.d_dict is None:
@@ -21,5 +22,10 @@ class SAEConfig:
 
     def get_cls(self):
         from nqgl.sc_sae.models import MODEL_CLASSES
+        from nqgl.sc_sae.models.normalizer import NORMALIZER_CLASSES
 
-        return MODEL_CLASSES[self.sae_type]
+        return type(
+            self.sae_type + "_with_" + self.normalizer_type,
+            (NORMALIZER_CLASSES[self.normalizer_type], MODEL_CLASSES[self.sae_type]),
+            {},
+        )

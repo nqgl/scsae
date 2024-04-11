@@ -18,6 +18,7 @@ class SweepConfig:
         "LinearScaleSAE_NonMulGrads",
         "VanillaSAE",
     )
+    normalizer_type: Tuple[str] = ("ConstL2Normalizer", "L2Normalizer")
     lr: Tuple[float] = (1e-3,)
     b1: Tuple[float] = 0.9
     b2: Tuple[float] = 0.999
@@ -25,6 +26,7 @@ class SweepConfig:
     cooldown_factor: Tuple[int] = (10,)
     l1_coeff: Tuple[float] = (1.5e-3, 2e-3)
     sparsity_penalty_type: Tuple[str] = ("l1", "l1_sqrt")
+    dict_mult: Tuple[int] = (16,)
 
     def to_sweep_config(self, method="grid"):
         d = asdict(self)
@@ -67,6 +69,7 @@ class ConfigFromSweep:
     cooldown_factor: int
     l1_coeff: float
     sparsity_penalty_type: str
+    normalizer_type: str
     dict_mult: int = 16
     # or b1, b2 and property(betas)
 
@@ -79,6 +82,7 @@ def set_configs_from_sweep(
     scfg = scfg or ConfigFromSweep(**wandb.config)
 
     cfg.sae_cfg.sae_type = scfg.sae_type
+    cfg.sae_cfg.normalizer_type = scfg.normalizer_type
     cfg.sae_cfg.dict_mult = scfg.dict_mult
     cfg.optim_cfg.lr = scfg.lr
     cfg.optim_cfg.betas = scfg.betas
@@ -86,6 +90,7 @@ def set_configs_from_sweep(
     cfg.lr_scheduler_cfg.cooldown_factor = scfg.cooldown_factor
     cfg.l1_coeff = (
         scfg.l1_coeff
+        * sparsity_coeff_adjustment(scfg)
         # if scfg.sae_type == "LinearScaleSAE_MulGrads"
         # else (
         #     scfg.l1_coeff
@@ -98,7 +103,13 @@ def set_configs_from_sweep(
 
 
 def sparsity_coeff_adjustment(scfg: ConfigFromSweep):
-    d = {}
+    if scfg.sparsity_penalty_type == "l1_sqrt":
+        return 1.5
+    return {
+        "LinearScaleSAE_MulGrads": 0.1,
+        "LinearScaleSAE_NonMulGrads": 0.7,
+        "VanillaSAE": 3,
+    }[scfg.sae_type]
 
 
 def get_configs_from_sweep(scfg: ConfigFromSweep = None, adjust_sparsity_coeff=True):
@@ -113,7 +124,7 @@ def get_configs_from_sweep(scfg: ConfigFromSweep = None, adjust_sparsity_coeff=T
         flatten_heads=False,
         device="cuda",
         d_data=sae_cfg.d_data,
-        batch_size=4096,
+        batch_size=2048,
         buffer_mult=2048,
         buffer_refresh_ratio=0.5,
         buffer_dtype="fp16",
@@ -141,10 +152,7 @@ def get_configs_from_sweep(scfg: ConfigFromSweep = None, adjust_sparsity_coeff=T
         data_cfg=DataConfig(),
         use_autocast=True,
         buffer_cfg=buf_cfg,
-        lr_scheduler_cfg=LrSchedulerConfig(
-            warmup_steps=1_000,
-            cooldown_begin=40_000,
-        ),
+        lr_scheduler_cfg=LrSchedulerConfig(),
     )
 
     set_configs_from_sweep(cfg=cfg, legacy_cfg=legacy_cfg, scfg=scfg)

@@ -1,3 +1,5 @@
+import torch.backends
+import torch.backends.cuda
 from nqgl.sc_sae.models import test
 from nqgl.sc_sae.data import ac_cfg
 from nqgl.sc_sae.sweep.swept_config import (
@@ -10,6 +12,11 @@ import tqdm
 
 import wandb
 
+import torch
+
+# torch.backends.cuda.matmul.allow_tf32 = True
+torch.set_float32_matmul_precision("high")
+
 
 def run():
     wandb.init()
@@ -20,19 +27,12 @@ def run():
         val_tokens=test.val_tokens,
         legacy_cfg=lgcfg,
         target_l0=25,
+        adjust_eps=0,
     )
     wandb.config.update(trainer.cfg)
-    # wandb.init(config=trainer.cfg, reinit=True)
-    # buffer = test.Buffer(test.legacy_cfg, test.train_tokens, test.model)
-
-    # def train_buffer():
-    #     for i in tqdm.tqdm(range(90000 * 20 * 1024 // 2048)):
-    #         yield buffer.next()
 
     ac = ac_cfg.ac
-    cfg.use_autocast = False
-    trainer.train(ac.read_as_iter(trainer.cfg.buffer_cfg.batch_size, stop_after=32))
-    # trainer.train(train_buffer())
+    trainer.train(ac.read_as_iter(trainer.cfg.buffer_cfg.batch_size))
     wandb.finish()
 
 

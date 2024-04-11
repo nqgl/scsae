@@ -21,6 +21,8 @@ class SAETrainConfig(WandbDynamicConfig):
     use_autocast: bool = True
     lr_schedule: bool = True
     lr_scheduler_cfg: LrSchedulerConfig = field(default_factory=LrSchedulerConfig)
+    resample_frequency: int = 25_000
+    reset_before_resample: int = 12_500
 
     def sparsity_penalty(self, acts):
         acts = acts.relu()
