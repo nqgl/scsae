@@ -13,7 +13,6 @@ class DataConfig:
     split: str
     model_name: str
     layer_num: int
-    skip: bool
     set_bos: bool
     dataset: str = "alancooney/sae-monology-pile-uncopyrighted-tokenizer-gpt2"
     seq_mul: int = 2

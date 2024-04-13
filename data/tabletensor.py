@@ -4,10 +4,10 @@ import tables
 from pathlib import Path
 import torch
 from typing import Union, List
+import tqdm
 
-
-path = Path("data/table_test.h5")
-t = torch.arange(32).reshape(2, 16)
+# path = Path("data/table_test.h5")
+# t = torch.arange(32).reshape(2, 16)
 
 dtype_to_atom = {
     torch.float32: tables.Float32Atom(),
@@ -32,29 +32,28 @@ class AppendDiskTensor:
 
     def init_file(self, force=False):
         assert force or not self.path.exists()
-        self.path = tables.open_file(str(path), mode="w")
-        self.path.create_earray(
-            self.path.root,
+        table = tables.open_file(str(self.path), mode="w")
+        table.create_earray(
+            table.root,
             "batches",
             atom=dtype_to_atom[self.dtype],
             shape=(0, *self.fixed_shape),
         )
-        self.path.close()
+        table.close()
 
     def write(self, t: torch.Tensor):
-        if not path.exists():
+        if not self.path.exists():
             self.init_file()
-        assert t.dtype == self.dtype
-        assert t.shape[1:] == self.fixed_shape
-        self.path = tables.open_file(str(path), mode="a")
-
-        self.path.root.batches.append(t.cpu().numpy())
-        self.path.close()
+        assert t.dtype == self.dtype, (t.dtype, self.dtype)
+        assert t.shape[1:] == torch.Size(self.fixed_shape), (t.shape, self.fixed_shape)
+        table = tables.open_file(str(self.path), mode="a")
+        table.root.batches.append(t.cpu().numpy())
+        table.close()
 
     def read(self):
-        self.path = tables.open_file(str(path), mode="r")
-        t = torch.tensor(self.path.root.batches[:])
-        self.path.close()
+        table = tables.open_file(str(self.path), mode="r")
+        t = torch.tensor(table.root.batches[:])
+        table.close()
         return t
 
     def shuffle(self):
@@ -69,37 +68,63 @@ class Piler:
         if isinstance(path, str):
             path = Path(path)
         self.path = path
+        self.readonly = num_piles is None
         if num_piles is None:
             g = path.glob("pile*")
             num_piles = len(list(g))
+            assert num_piles > 0
         else:
             path.mkdir(parents=True)
+            g = path.glob("pile*")
+            assert len(list(g)) == 0
+
         self.dtype = dtype
         self.fixed_shape = fixed_shape
         self.num_piles = num_piles
-        self.piles = [
+        self.piles: List[AppendDiskTensor] = [
             AppendDiskTensor(path / f"pile_{i}.h5", dtype, fixed_shape)
             for i in range(num_piles)
         ]
 
-    def randpile(self, t: torch.Tensor):
+    def distribute(self, t: torch.Tensor):
+        if self.readonly:
+            raise ValueError("Cannot write to a readonly Piler")
         i = torch.randint(0, self.num_piles, [t.shape[0]])
         for pile in range(self.num_piles):
             self.piles[pile].write(t[i == pile])
 
     def shuffle_piles(self):
-        for pile in self.piles:
+        tqdm.tqdm.write("Shuffling piles")
+        if self.readonly:
+            raise ValueError("Cannot write to a readonly Piler")
+
+        for pile in tqdm.tqdm(self.piles):
             pile.shuffle()
 
+    def __getitem__(self, i):
+        if isinstance(i, int):
+            piles = [self.piles[i]]
+        elif isinstance(i, list):
+            piles = [self.piles[j] for j in i]
+        else:
+            piles = self.piles[i]
+        return torch.cat([p.read() for p in piles])
 
-t_app = AppendDiskTensor(
-    path,
-    torch.int64,
-    [16],
-)
 
-l = []
-for i in range(4):
-    t = torch.arange(32).reshape(2, 16)
-    t_app.write(t)
-    l.append(t)
+def main():
+
+    t_app = AppendDiskTensor(
+        "data/table_test.h5",
+        torch.int64,
+        [16],
+    )
+    p = Piler("data/piler_test", torch.int64, [16], num_piles=4)
+    for i in range(400):
+        t = torch.arange(32000).reshape(-1, 16)
+        p.distribute(t)
+        print()
+    p.shuffle_piles()
+
+
+if __name__ == "__main__":
+    main()
