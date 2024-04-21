@@ -50,7 +50,10 @@ def run():
         )
 
     wandb.config.update(trainer.cfg)
-
+    nice_name = wandb.config["sae_type"]
+    if wandb.config["sparsity_penalty_type"] == "l1_sqrt":
+        nice_name = "Sqrt(" + nice_name + ")"
+    wandb.config.update({"nice_name": nice_name})
     trainer.train(
         cfg.data_cfg.train_data_batch_generator(
             model=test.model, batch_size=cfg.buffer_cfg.batch_size
