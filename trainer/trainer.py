@@ -241,7 +241,7 @@ class Trainer:
         avg_alive_norm = self.model.W_enc[:, ~dead].norm(dim=0).mean()
         new_directions = sample_points[indices]
         new_directions = new_directions / new_directions.norm(dim=-1, keepdim=True)
-        self.model.W_enc[:, dead] = new_directions.t() * avg_alive_norm * 0.02
+        self.model.W_enc[:, dead] = new_directions.t() * avg_alive_norm * 0.2
         self.model.W_dec[dead] = new_directions
         self.model.b_enc[dead] = 0
         self.model.norm_dec()

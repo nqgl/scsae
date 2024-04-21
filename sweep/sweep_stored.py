@@ -5,6 +5,7 @@ from nqgl.sc_sae.models import test
 # from nqgl.sc_sae.data import ac_cfg
 from nqgl.sc_sae.sweep.swept_config import (
     get_configs_from_sweep,
+    sparsity_coeff_adjustment,
     ConfigFromSweep,
 )
 from nqgl.sc_sae.models import test
@@ -27,11 +28,21 @@ def exclude_from_sweep():
     return False
 
 
+QUICK_TEST = False
+
+
 def run():
     wandb.init()
-    cfg, lgcfg = get_configs_from_sweep(ConfigFromSweep(**wandb.config))
+    scfg = ConfigFromSweep(**wandb.config)
+    cfg, lgcfg = get_configs_from_sweep(scfg=scfg)
     # if cfg.sae_cfg.sae_type != "VanillaSAE":
     #     cfg.neuron_dead_threshold = -1
+    cfg.l1_coeff = cfg.l1_coeff * sparsity_coeff_adjustment(scfg)
+    wandb.config.update({"adjusted_l1_coeff": cfg.l1_coeff})
+    if QUICK_TEST:
+        cfg.buffer_cfg.batch_size = 512
+        print("\nwarning: quick test")
+        print("small batches")
     if wandb.config["l0_target"]:
         trainer = L0TargetingTrainer(
             cfg,
@@ -56,7 +67,9 @@ def run():
     wandb.config.update({"nice_name": nice_name})
     trainer.train(
         cfg.data_cfg.train_data_batch_generator(
-            model=test.model, batch_size=cfg.buffer_cfg.batch_size
+            model=test.model,
+            batch_size=cfg.buffer_cfg.batch_size,
+            nsteps=None if not QUICK_TEST else 20_000,
         )
     )
     wandb.finish()

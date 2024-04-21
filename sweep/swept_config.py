@@ -107,11 +107,11 @@ def set_configs_from_sweep(
 
 def sparsity_coeff_adjustment(scfg: ConfigFromSweep):
     if scfg.sparsity_penalty_type == "l1_sqrt":
-        return 1.5
+        return 2
     d = {
-        "SCSAE_MulGrads": 0.1,
-        "SCSAE_RegGrads": 0.7,
-        "VanillaSAE": 3,
+        "SCSAE_MulGrads": 0.3,
+        "SCSAE_RegGrads": 3,
+        "VanillaSAE": 7,
     }
     if scfg.sae_type not in d:
         return 1

@@ -147,9 +147,9 @@ class DataConfig:
 
         # loading_data_first_time = not dataset_reshaped_path.exists()
 
-    def train_data_batch_generator(self, model, batch_size):
+    def train_data_batch_generator(self, model, batch_size, nsteps=None):
         return ActsData(self, model).acts_generator(
-            self.trainsplit, batch_size=batch_size
+            self.trainsplit, batch_size=batch_size, nsteps=nsteps
         )
 
 
@@ -272,13 +272,17 @@ class ActsData:
         )
         return acts.half()
 
-    def acts_generator(self, split: SplitConfig, batch_size):
+    def acts_generator(self, split: SplitConfig, batch_size, nsteps=None):
         if not self.cfg._acts_piles_path(split).exists():
             self._store_split(split)
         piler = self.cfg.acts_piler(split)
-        progress = tqdm.trange(split.approx_num_tokens // batch_size)
+        assert nsteps == None or nsteps <= split.approx_num_tokens // batch_size
+        print("\nProgress bar activation batch count is approximate\n")
+        progress = tqdm.trange(nsteps or split.approx_num_tokens // batch_size)
         for p in range(piler.num_piles):
             pile = piler[p]
             for i in range(0, len(pile) // batch_size * batch_size, batch_size):
                 yield pile[i : i + batch_size].cuda()
                 progress.update()
+            if nsteps is not None and progress.n >= nsteps:
+                break
