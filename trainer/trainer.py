@@ -138,6 +138,12 @@ class Trainer:
         for x in datasource:
             logdict = self.trainstep(x)
         self.model.save(wandb.run.name + f"_{self.t}")
+        import tqdm
+
+        for i in tqdm.tqdm(range(10)):
+            self.log_recons("recons_final/with_bos/", True, num_batches=20)
+            self.log_recons("recons_final/no_bos/", False, num_batches=20)
+            self.t += 1
 
     def log_step(self, logdict):
         if (self.t - 1) % self.logfreq == 0:
@@ -150,7 +156,8 @@ class Trainer:
                 }
             )
         if (self.t - 1) % self.log_recons_freq == 0 and self.t > 1:
-            self.log_recons()
+            self.log_recons("recons/with_bos/", True)
+            self.log_recons("recons/no_bos/", False)
         if (self.t - 1) % self.log_hists_freq == 0:
             self.loghists()
 
@@ -167,37 +174,18 @@ class Trainer:
             }
         )
 
-    def log_recons(self):
+    def log_recons(self, label, proc_bos, num_batches=5):
         self.log(
             {
-                **{
-                    "num_steps": self.t,
-                },
-                **{
-                    ("recons/" + k): v
-                    for k, v in get_recons_loss(
-                        self.llm_model,
-                        self.model,
-                        buffer=None,
-                        all_tokens=self.llm_val_tokens,
-                        cfg=self.legacy_cfg,
-                        bos_processed_with_hook=False,
-                    ).items()
-                },
-            },
-            step=self.t,
-        )
-        self.log(
-            {
-                ("recons/with_proc_bos/" + k): v
+                (label + k): v
                 for k, v in get_recons_loss(
                     self.llm_model,
                     self.model,
                     buffer=None,
                     all_tokens=self.llm_val_tokens,
                     cfg=self.legacy_cfg,
-                    bos_processed_with_hook=True,
-                    num_batches=10 if self.t % 10_000 != 0 else 100,
+                    bos_processed_with_hook=proc_bos,
+                    num_batches=num_batches,
                 ).items()
             },
             step=self.t,

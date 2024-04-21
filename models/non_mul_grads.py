@@ -3,7 +3,7 @@ from torch.cuda.amp import custom_bwd, custom_fwd
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from models.fwd_fn_saes import ForwardFnSAE
+from nqgl.sc_sae.models.fwd_fn_saes import ForwardFnSAE
 from nqgl.sc_sae.models.configs import SAEConfig
 from unpythonic import box
 from jaxtyping import Float

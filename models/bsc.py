@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from nqgl.sc_sae.models.equiv_fwd_fns import ForwardFnSAE
+from nqgl.sc_sae.models.fwd_fn_saes import ForwardFnSAE
 from nqgl.sc_sae.models.configs import SAEConfig
 from unpythonic import box
 from nqgl.sc_sae.models.base_sae import BaseSAE
