@@ -8,6 +8,7 @@ class OptimConfigBase:
     optim: str = "adam"
     beta1: float = 0.9
     beta2: float = 0.99
+    bias_lr_mult: float = 1
 
     def get_optim(self, params):
         if self.optim == "adam":

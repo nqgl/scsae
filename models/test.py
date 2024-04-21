@@ -1,4 +1,4 @@
-from nqgl.sc_sae.models import LinearScaleSAE, SAEConfig
+from nqgl.sc_sae.models import SCSAE, SAEConfig
 from nqgl.sc_sae.data.dataset import DataConfig
 from nqgl.sc_sae.trainer import Trainer, OptimConfig, LrSchedulerConfig, SAETrainConfig
 from nqgl.sc_sae.from_hsae_re.buffer2_no_cast import Buffer, BufferConfig
@@ -76,7 +76,7 @@ import torch
 cfg, legacy_cfg = get_configs()
 model = (
     HookedTransformer.from_pretrained(cfg.data_cfg.model_name)
-    .to(torch.float16)
+    # .to(torch.float16)
     .to(device)
 )
 train_percent = 5

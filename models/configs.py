@@ -11,10 +11,11 @@ class SAEConfig:
     l1_coeff: float = 1e-3
     tied_init: bool = True
     use_b_dec: bool = True
-    selectively_norm_dec: bool = False
     d_dict: int = None
-    sae_type: str = "LinearScaleSAE_MulGrads"
+    sae_type: str = "SCSAE_MulGrads"
     normalizer_type: str = "L2Normalizer"
+    sub_b_dec: bool = True
+    use_b_pre: bool = False
 
     def __post_init__(self):
         if self.d_dict is None:

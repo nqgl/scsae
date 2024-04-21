@@ -21,7 +21,7 @@ class FreqTracker:
 
 
 class EMAFreqTracker:
-    def __init__(self, d_dict, beta=0.999):
+    def __init__(self, d_dict, beta=0.99):
         self.activation_freqs = (
             torch.zeros(d_dict, dtype=torch.float32, device="cuda") + 1e-5
         )

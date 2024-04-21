@@ -4,11 +4,11 @@ import wandb
 
 @dataclass
 class LrSchedulerConfig:
-    warmup_steps: int = 5_000
+    warmup_steps: int = 2_000
     cooldown_begin: int = 75_000
     cooldown_period: int = 20_000
     cooldown_factor: int = 10
-    warmup_after_resample: int = 5_000
+    warmup_after_resample: int = 2000
 
     def get_lr_sched_lambda(self, trainer):
         def lr_sched_mul():

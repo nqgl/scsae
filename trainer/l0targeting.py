@@ -17,8 +17,9 @@ class L0TargetingTrainer(Trainer):
         self.adjust_eps = adjust_eps
 
     def log_step(self, logdict):
-        if logdict["l0"] > self.target_l0:
-            self.cfg.l1_coeff *= 1 + self.adjust_eps
-        else:
-            self.cfg.l1_coeff *= 1 - self.adjust_eps
+        if self.t > 3000:
+            if logdict["l0"] > self.target_l0:
+                self.cfg.l1_coeff *= 1 + self.adjust_eps
+            else:
+                self.cfg.l1_coeff *= 1 - self.adjust_eps
         return super().log_step(logdict)

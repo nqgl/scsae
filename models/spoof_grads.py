@@ -12,10 +12,10 @@ class SpoofedTodo(BaseSAE):
     raise NotImplementedError
     MODEL_TYPE = ...
 
-    def encode(self, x, spoofed_acts_box):
+    def _encode(self, x_cent, spoofed_acts_box):
         raise NotImplementedError
 
-        mul = (x - self.b_dec) @ self.W_enc
+        mul = x_cent @ self.W_enc
         pre_acts = mul + self.b_enc
         # active = pre_acts - self.b_enc.detach()
         # gate = (pre_acts > 0) & (active > 0)

@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from dataclasses import asdict
 from nqgl.mlutils.components.normalizer.anth_l2 import L2Normalizer, l2normalized
+from abc import abstractmethod
 
 SAVE_DIR = Path.home() / "workspace"
 if not SAVE_DIR.exists():
@@ -39,10 +40,14 @@ class BaseSAE(nn.Module):
         )
         if cfg.tied_init:
             self.W_dec.data[:] = self.W_enc.data.t()
-        self.b_enc: Float[Tensor, "d_dict"] = nn.Parameter(torch.zeros(cfg.d_dict))
+        self.b_enc: Float[Tensor, "d_dict"] = nn.Parameter(torch.zeros(cfg.d_dict) - 0)
         self.b_dec: Float[Tensor, "d_data"] = (
             nn.Parameter(torch.zeros(cfg.d_data)) if self.cfg.use_b_dec else 0
         )
+        if self.cfg.use_b_pre:
+            self.b_pre: Float[Tensor, "d_data"] = nn.Parameter(torch.zeros(cfg.d_data))
+        else:
+            self.b_pre = None
         self.norm_dec()
         assert self.MODEL_TYPE == self.cfg.sae_type
 
@@ -62,6 +67,15 @@ class BaseSAE(nn.Module):
         return self.decode(acts)
 
     def encode(self, x, spoofed_acts_box):
+        if self.cfg.use_b_pre:
+            x = x + self.b_pre
+        elif self.cfg.sub_b_dec:
+            x = x - self.b_dec
+        acts = self._encode(x, spoofed_acts_box)
+        return acts
+
+    @abstractmethod
+    def _encode(self, x_cent, spoofed_acts_box):
         raise NotImplementedError
 
     def decode(self, acts):
@@ -73,15 +87,23 @@ class BaseSAE(nn.Module):
     def post_step(self):
         self.norm_dec()
 
+    def grouped_params(self):
+        biases = []
+        other = []
+        for param in self.named_parameters():
+            if "b_" in param[0]:
+                biases.append(param[1])
+            else:
+                other.append(param[1])
+        biases_groups = {"params": biases, "name": "biases"}
+        weight_groups = {"params": other, "name": "weights"}
+        return [biases_groups, weight_groups]
+
     @torch.no_grad()
     def norm_dec(self):
         norm = self.W_dec.norm(dim=-1, keepdim=True)
         normed = self.W_dec / norm
-        self.W_dec[:] = (
-            torch.where(norm > 1, normed, self.W_dec)
-            if self.cfg.selectively_norm_dec
-            else normed
-        )
+        self.W_dec[:] = normed
 
     @torch.no_grad()
     def orthogonalize_dec_grads(self):
@@ -94,7 +116,7 @@ class BaseSAE(nn.Module):
     def get_next_version(cls, name=None, save_dir=None):
         save_dir = SAVE_DIR if save_dir is None else Path(save_dir)
 
-        search = cls.MODEL_TYPE + f"_{name}" if name is not None else cls.sae_type
+        search = cls.MODEL_TYPE + f"_{name}" if name is not None else cls.MODEL_TYPE
         import glob
 
         type_files = glob.glob(str(save_dir) + (f"/*_{search}*_cfg.json"))

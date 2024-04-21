@@ -21,7 +21,7 @@ class SplitConfig:
     split_key: str = "train"
     documents_per_chunk: int = 2**18  # 128 * 1m // 2 = 32 mtok in the default case
     tokens_from_split: int = None
-    tokens_per_pile: int = 2**24
+    tokens_per_pile: int = 2**27
     acts_per_pile: int = 2**18
     approx_tokens_per_percent: int = 30_000_000 * 256 // 100
 
@@ -178,7 +178,7 @@ class TokensData:
         num_tok = all_documents.numel()
         piler = self.cfg.tokens_piler(split, write=True)
         tqdm.tqdm.write("Distributing tokens to piles")
-        doc_dist_batch_size = all_documents.shape[0] // 100
+        doc_dist_batch_size = all_documents.shape[0] // 30
         for i in tqdm.tqdm(
             range(
                 0,
@@ -209,7 +209,7 @@ class TokensData:
         ), f"{tokens.shape} from piler vs {num_tokens} requested\
                 this is expected if tokens per split is small, otherwise a bug.\
                     \n piles requested: {num_piles}, available: {piler.num_piles}"
-        return tokens
+        return tokens[:num_tokens] if num_tokens is not None else tokens
 
 
 class ActsData:

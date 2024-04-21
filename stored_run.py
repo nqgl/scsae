@@ -1,4 +1,4 @@
-from nqgl.sc_sae.models import LinearScaleSAE, SAEConfig
+from nqgl.sc_sae.models import SCSAE, SAEConfig
 from nqgl.sc_sae.data.dataset import DataConfig, SplitConfig
 from nqgl.sc_sae.trainer import Trainer, OptimConfig, LrSchedulerConfig, SAETrainConfig
 from nqgl.sc_sae.from_hsae_re.buffer2_no_cast import Buffer, BufferConfig
@@ -15,16 +15,14 @@ from typing import Tuple
 def get_configs(d={}) -> Tuple[SAETrainConfig, HierarchicalAutoEncoderConfig]:
     dict_mult = d.get("dict_mult", 16)
 
-    sae_cfg = SAEConfig(
-        dict_mult=dict_mult,
-    )
+    sae_cfg = SAEConfig(dict_mult=dict_mult, sae_type="NoEncSAE")
 
     data_cfg = DataConfig(
         trainsplit=SplitConfig(
             splitname="train",
             start=0,
             end=40,
-            tokens_from_split=500_000_000 // 2,
+            tokens_from_split=400_000_000 // 1,
         )
     )
 
@@ -34,7 +32,7 @@ def get_configs(d={}) -> Tuple[SAETrainConfig, HierarchicalAutoEncoderConfig]:
         flatten_heads=False,
         device="cuda",
         d_data=sae_cfg.d_data,
-        batch_size=4096,
+        batch_size=1024,
         buffer_mult=512,
         buffer_refresh_ratio=0.5,
         buffer_dtype="fp16",
@@ -57,20 +55,20 @@ def get_configs(d={}) -> Tuple[SAETrainConfig, HierarchicalAutoEncoderConfig]:
         device=device,
     )
 
-    betas = d.get("betas", (0.9, 0.999))
+    betas = d.get("betas", (0.9, 0.99))
     cfg = SAETrainConfig(
         sae_cfg=sae_cfg,
         optim_cfg=OptimConfig(lr=d.get("lr", 1e-3), betas=betas),
         data_cfg=data_cfg,
         buffer_cfg=buf_cfg,
         use_autocast=True,
-        l1_coeff=d.get("l1_coeff", 1.5e-3),
+        l1_coeff=d.get("l1_coeff", 1e-3),
         lr_scheduler_cfg=LrSchedulerConfig(
-            warmup_steps=3_00,
-            cooldown_begin=40_000,
+            cooldown_begin=75_000,
             cooldown_period=d.get("cooldown_period", 5_000),
             cooldown_factor=d.get("cooldown_factor", 10),
         ),
+        neuron_dead_threshold=-1,
     )
     return cfg, legacy_cfg
 

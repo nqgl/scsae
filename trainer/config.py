@@ -23,11 +23,12 @@ class SAETrainConfig(WandbDynamicConfig):
     lr_scheduler_cfg: LrSchedulerConfig = field(default_factory=LrSchedulerConfig)
     resample_frequency: int = 25_000
     reset_before_resample: int = 12_500
+    neuron_dead_threshold: float = 3e-6
 
     def sparsity_penalty(self, acts):
         acts = acts.relu()
         if self.sparsity_penalty_type == "l1_sqrt":
-            acts = acts.sqrt()
+            acts = (acts + 1e-6).sqrt()
         elif not self.sparsity_penalty_type == "l1":
             raise ValueError(f"Unknown penalty type {self.sparsity_penalty_type}")
         return acts.mean(dim=0).sum() * self.l1_coeff

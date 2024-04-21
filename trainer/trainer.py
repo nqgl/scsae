@@ -1,7 +1,7 @@
 from .config import SAETrainConfig
 from nqgl.sc_sae.models import SAEConfig, BaseSAE
 from unpythonic import box
-from nqgl.sc_sae.models.mul_grads import LinearScaleSAE
+from nqgl.sc_sae.models.mul_grads import SCSAE
 import torch
 import wandb
 from nqgl.hsae_re.training.recons_modified import get_recons_loss
@@ -25,7 +25,7 @@ class Trainer:
         self.t = 1
         self.logfreq = 1
         self.log_recons_freq = 2000
-        self.log_hists_freq = 3000
+        self.log_hists_freq = 1000
         self.llm_model = model
         self.llm_val_tokens = val_tokens
         self.current_datasource = None
@@ -39,6 +39,8 @@ class Trainer:
             verbose=True,
         )
         self.legacy_cfg = legacy_cfg
+        self.model.grouped_params()
+        # assert False
 
     def log(self, logdict, step=None):
         if step is None:
@@ -115,6 +117,8 @@ class Trainer:
             and self.t < self.cfg.lr_scheduler_cfg.cooldown_begin * 0.75
         ):
             self.resample()
+        # if self.t % 10_000 == 0:
+        #     self.model.save(wandb.run.name + f"_{self.t}")
 
     def process_acts(self, acts):
         self.ema_freq_tracker.update(acts)
@@ -133,6 +137,7 @@ class Trainer:
             print("Not logging to wandb")
         for x in datasource:
             logdict = self.trainstep(x)
+        self.model.save(wandb.run.name + f"_{self.t}")
 
     def log_step(self, logdict):
         if (self.t - 1) % self.logfreq == 0:
@@ -151,8 +156,16 @@ class Trainer:
 
     def loghists(self):
         freqs = self.ema_freq_tracker.freqs
-        hist = wandb.Histogram(freqs.cpu().numpy())
-        self.log({"frequencies": hist})
+        if (self.t - 1) % (self.log_hists_freq * 3) == 0:
+            hist = wandb.Histogram(freqs.cpu().numpy())
+            self.log({"frequencies": hist})
+        self.log(
+            {
+                "encoder_biases": wandb.Histogram(
+                    self.model.b_enc.detach().cpu().numpy()
+                ),
+            }
+        )
 
     def log_recons(self):
         self.log(
@@ -206,8 +219,9 @@ class Trainer:
     @torch.inference_mode()
     def resample(self):
         print("resampling")
-        dead = self.freq_tracker.freqs < 1e-6
+        dead = self.freq_tracker.freqs < self.cfg.neuron_dead_threshold
         num_samples = dead.count_nonzero()
+        assert dead.ndim == 1
         if num_samples == 0:
             return
         resample_subset_size = 819_200
@@ -224,13 +238,19 @@ class Trainer:
         with torch.autocast(device_type="cuda"):
             for i in range(0, resample_subset_size, batch_size):
                 x = next(self.current_datasource)
+                sample_points[i : i + batch_size] = x
+                x = self.model.normalize(x)
                 x_pred = self.model(x)
                 l2_diff_sq[i : i + batch_size] = (x - x_pred).pow(2).sum(dim=-1)
-                sample_points[i : i + batch_size] = x
+        if self.cfg.data_cfg.model_name in ("gpt2", "gpt2-small"):
+            norms = sample_points.norm(dim=-1, p=2)
+            mask = norms < 2500
+            sample_points = sample_points[mask]
+            l2_diff_sq = l2_diff_sq[mask]
         indices = torch.multinomial(l2_diff_sq, num_samples, replacement=False)
         assert indices.numel() == num_samples
 
-        avg_alive_norm = self.model.W_enc[:, ~dead].norm(dim=-1).mean()
+        avg_alive_norm = self.model.W_enc[:, ~dead].norm(dim=0).mean()
         new_directions = sample_points[indices]
         new_directions = new_directions / new_directions.norm(dim=-1, keepdim=True)
         self.model.W_enc[:, dead] = new_directions.t() * avg_alive_norm * 0.02
@@ -239,7 +259,7 @@ class Trainer:
         self.model.norm_dec()
         print("finished resampling")
         resetter = AdamResetter(self.model)
+        # reset the optimizer at the resampled locations
         resetter.W_enc.transpose(-2, -1)[dead](self.optim, alive_indices=~dead)
         resetter.W_dec[dead](self.optim, alive_indices=~dead)
         resetter.b_enc[dead](self.optim, alive_indices=~dead)
-        # reset the optimizer at these locations

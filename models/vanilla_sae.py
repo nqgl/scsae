@@ -11,7 +11,7 @@ from nqgl.sc_sae.models.base_sae import BaseSAE
 class VanillaSAE(BaseSAE):
     MODEL_TYPE = "VanillaSAE"
 
-    def encode(self, x, spoofed_acts_box):
-        mul = (x - self.b_dec) @ self.W_enc
+    def _encode(self, x_cent, spoofed_acts_box):
+        mul = x_cent @ self.W_enc
         pre_acts = mul + self.b_enc
         return torch.relu(pre_acts)
