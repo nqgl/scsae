@@ -111,7 +111,7 @@ def sparsity_coeff_adjustment(scfg: ConfigFromSweep):
     d = {
         "SCSAE_MulGrads": 0.3,
         "SCSAE_RegGrads": 3,
-        "VanillaSAE": 7,
+        "VanillaSAE": 3,
     }
     if scfg.sae_type not in d:
         return 1
